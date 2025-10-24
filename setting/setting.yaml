@@ -1,0 +1,121 @@
+defaults:
+  - _self_
+  - model: RetrieverRoBERTa
+  - data: REUTERS
+
+tasks: [ "label_desc" ]
+
+trainer:
+  max_epochs: 5
+  accelerator: gpu
+  devices: [ 0 ]
+  precision: 16-mixed
+  patience: 3
+  min_delta: 0.01
+  fast_dev_run: False
+  progress_bar_refresh_rate: 10
+
+log:
+  project: RAG-Fuse
+  dir: resource/log/
+
+model_checkpoint:
+  dir: resource/model_checkpoint/
+
+ranking:
+  dir: resource/ranking/
+
+apmi:
+  vocabulary_size: ${data.vocabulary_size}
+  pmi_threshold: 64
+  num_labels: 64
+
+
+retriever:
+  index: True
+  retrieve: True
+  name: name
+  sparse:
+    model: BM25
+    name: ${retriever.sparse.model}_${data.name}
+    cutoff: 64
+    num_labels: 32
+    aggregation: max
+  dense:
+    model: RetrieverBERT
+    name: ${retriever.dense.model}_${data.name}
+    num_labels: 32
+
+prediction:
+  dir: resource/prediction/${model.name}_${data.name}/
+  fold_idx: 0
+  write_interval: batch
+
+llm:
+  dir: resource/llm/
+
+  prompt_opt:
+    num_targets_labels: ${data.llm.prompt_opt.num_targets_labels}
+    num_samples_per_target_label: ${data.llm.prompt_opt.num_samples_per_target_label}
+    num_epochs: 3
+    batch_size: 32
+    timeout: 16
+    max_gen_len: 256
+    temperature: 0.5
+    top_p: 0.5
+    model: meta.llama3-1-8b-instruct-v1:0 # arn:aws:bedrock:us-west-2:179395270822:inference-profile/us.meta.llama4-scout-17b-instruct-v1:0 #meta.llama4-scout-17b-instruct-v1:0 #meta.llama3-1-8b-instruct-v1:0
+
+  label_desc:
+    batch_size: 32
+    max_gen_len: 256
+    temperature: 0.6
+    top_p: 0.9
+    timeout: 16
+    num_samples: 5
+    max_samples_per_label: 2
+    request_dir: resource/llm/${data.name}/request/
+    response_dir: resource/llm/${data.name}/response/
+
+fusion:
+  norm: zmuv
+  method: mnz
+  model:
+    target:
+      name: xLLM_RetrieverRoBERTa
+    source:
+      name: xLLM_RetrieverRoBERTa
+
+aggregation:
+  model:
+    source:
+      name: ${fusion.model.target.name}
+    target:
+      name: LLM_${model.name}
+
+result:
+  dir: resource/result/
+
+rpr:
+  dir: resource/rpr/${model.name}_${data.name}/
+  write_interval: batch
+
+eval:
+  metrics: [ "ndcg", "precision" ]
+  thresholds: [ 1,5,10 ]
+  num_nearest_neighbors: 100
+  label_cls: [ "tail", "head" ]
+  index:
+    M: 128
+    indexThreadQty: ${data.num_workers}
+    efConstruction: 256
+    post: 2
+
+
+
+
+
+
+
+
+
+
